@@ -165,7 +165,6 @@ module ArOps where
   foldN : ∀ {s : S} {A : Set} →
     (P s → A → Maybe A) → Maybe A → Maybe A
   foldN f = foldShape (λ i ma → M._>>=_ ma (f i))
-
   foldJ : ∀ {s : S} {A : Set} →
     (P s → Maybe A) → Maybe A 
   foldJ f = foldShape (λ i result → M._<∣>_ (f i) result) nothing
@@ -305,7 +304,7 @@ module WFC where
     chooseFirstAllowed : Wave → CellIndex → Maybe PatternIndex
     chooseFirstAllowed w i =
       foldShape
-        (λ p → Maybe.maybe just
+        (λ p → maybe just
           (bool⇒maybe (w (realCell i ⊗ realPattern p)) p))
         nothing
 
@@ -313,8 +312,7 @@ module WFC where
     observe i p w =
       unnest
         (nest w ⟨ realCell i ⟩:=
-          (K false ⟨ realPattern p ⟩:=
-            w (realCell i ⊗ realPattern p)))
+          (K false ⟨ realPattern p ⟩:= true)) -- w (realCell i ⊗ realPattern p)
 
     hasSupport? : Problem → Wave → CellIndex → PatternIndex →
                   DirectionIndex → Bool
@@ -331,32 +329,63 @@ module WFC where
       w (realCell i ⊗ realPattern p) ∧ supported? problem w (i ⊗ p)
     pruneWave problem w (inj₁ i ⊗ inj₂ outside) =
       w (inj₁ i ⊗ inj₂ outside)
-    pruneWave problem w (inj₂ ghost ⊗ Pattern) =
-      w (inj₂ ghost ⊗ Pattern)
+    pruneWave problem w (inj₂ ghost ⊗ ep) =
+      w (inj₂ ghost ⊗ ep)
     
+
+
+    sameBool : Bool → Bool → Bool
+    sameBool true true = true
+    sameBool false false = true
+    sameBool _ _ = false
+
+    sameRealWave? : Wave → Wave → Bool
+    sameRealWave? before after =
+      all λ cp →
+        sameBool
+          (realWave before cp)
+          (realWave after cp)
+    
+    propagateStep : Problem → Wave → Success × Wave
+    propagateStep problem w =
+      let
+        w′ = pruneWave problem w
+      in
+        if sameRealWave? w w′
+        then Done ,′ w′
+        else Continue ,′ w′
     propagateWithLimit : ℕ → Problem → Wave → Wave
     propagateWithLimit zero problem w = w
     propagateWithLimit (suc n) problem w =
-      propagateWithLimit n problem (pruneWave problem w)
+      let
+        r , w′ = propagateStep problem w
+      in
+        case r of λ where
+          Done → w′
+          Continue → propagateWithLimit n problem w′
+    -- propagateWithLimit : ℕ → Problem → Wave → Wave
+    -- propagateWithLimit zero problem w = w
+    -- propagateWithLimit (suc n) problem w =
+    --   propagateWithLimit n problem (pruneWave problem w)
 
-    propagate : Problem → Wave → Wave
-    propagate = propagateWithLimit (suc (shapeSize (Cell ⊗ Pattern)))
+    -- propagate : Problem → Wave → Wave
+    -- propagate = propagateWithLimit (suc (shapeSize (Cell ⊗ Pattern)))
 
-    runStep : Problem → Wave → StepResult
-    runStep problem w = do
-      bool⇒res (noContradiction? w) w tt
-      maybe⇒inv-res (nextMRVNode w) (Done ,′ w) λ i → do
-        p ← maybe⇒res (chooseFirstAllowed w i) w
-        let w′ = propagate problem (observe i p w)
-        bool⇒res (noContradiction? w′) w′ (Continue ,′ w′)
+    -- runStep : Problem → Wave → StepResult
+    -- runStep problem w = do
+    --   bool⇒res (noContradiction? w) w tt
+    --   maybe⇒inv-res (nextMRVNode w) (Done ,′ w) λ i → do
+    --     p ← maybe⇒res (chooseFirstAllowed w i) w
+    --     let w′ = propagate problem (observe i p w)
+    --     bool⇒res (noContradiction? w′) w′ (Continue ,′ w′)
 
-    runLimit : ℕ → Problem → Wave → RunResult
-    runLimit zero problem w = err (OffLimit , w)
-    runLimit (suc n) problem w = do
-      r , w′ ← (Fail ,′_) <$>ₑ runStep problem w
-      case r of λ where
-        Done     → ok w′
-        Continue → runLimit n problem w′
+    -- runLimit : ℕ → Problem → Wave → RunResult
+    -- runLimit zero problem w = err (OffLimit , w)
+    -- runLimit (suc n) problem w = do
+    --   r , w′ ← (Fail ,′_) <$>ₑ runStep problem w
+    --   case r of λ where
+    --     Done     → ok w′
+    --     Continue → runLimit n problem w′
 
-    run : Problem → Wave → RunResult
-    run = runLimit (suc (shapeSize Cell))
+    -- run : Problem → Wave → RunResult
+    -- run = runLimit (suc (shapeSize Cell))
