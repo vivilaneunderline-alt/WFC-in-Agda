@@ -161,13 +161,14 @@ module ArOps where
   _⟨_⟩:=_ : ∀ {X : Set}{s} → X [[ s ]] → P s → X → X [[ s ]]
   a ⟨ i ⟩:= x = updateAt i x a
 
-  -- foldN : ∀ {s : S} {A : Set} →
-  --   (P s → A → Maybe A) → Maybe A → Maybe A
-  -- foldN f = foldShape (λ i ma → ma >>= f i)
+  open import Data.Maybe as M
+  foldN : ∀ {s : S} {A : Set} →
+    (P s → A → Maybe A) → Maybe A → Maybe A
+  foldN f = foldShape (λ i ma → M._>>=_ ma (f i))
 
-  -- foldJ : ∀ {s : S} {A : Set} →
-  --   (P s → Maybe A) → Maybe A 
-  -- foldJ f = foldShape (λ i result → f i <∣> result) nothing
+  foldJ : ∀ {s : S} {A : Set} →
+    (P s → Maybe A) → Maybe A 
+  foldJ f = foldShape (λ i result → M._<∣>_ (f i) result) nothing
 
 module Helper where
   open import Data.Maybe
@@ -299,8 +300,8 @@ module WFC where
 
     nextMRVNode : Wave → Maybe CellIndex
     nextMRVNode w = candidateCell (foldShape (mrvStep w) nothing)
---------------------------------------------------------
 
+--------------------------------------------------------
     chooseFirstAllowed : Wave → CellIndex → Maybe PatternIndex
     chooseFirstAllowed w i =
       foldShape
@@ -332,3 +333,30 @@ module WFC where
       w (inj₁ i ⊗ inj₂ outside)
     pruneWave problem w (inj₂ ghost ⊗ Pattern) =
       w (inj₂ ghost ⊗ Pattern)
+    
+    propagateWithLimit : ℕ → Problem → Wave → Wave
+    propagateWithLimit zero problem w = w
+    propagateWithLimit (suc n) problem w =
+      propagateWithLimit n problem (pruneWave problem w)
+
+    propagate : Problem → Wave → Wave
+    propagate = propagateWithLimit (suc (shapeSize (Cell ⊗ Pattern)))
+
+    runStep : Problem → Wave → StepResult
+    runStep problem w = do
+      bool⇒res (noContradiction? w) w tt
+      maybe⇒inv-res (nextMRVNode w) (Done ,′ w) λ i → do
+        p ← maybe⇒res (chooseFirstAllowed w i) w
+        let w′ = propagate problem (observe i p w)
+        bool⇒res (noContradiction? w′) w′ (Continue ,′ w′)
+
+    runLimit : ℕ → Problem → Wave → RunResult
+    runLimit zero problem w = err (OffLimit , w)
+    runLimit (suc n) problem w = do
+      r , w′ ← (Fail ,′_) <$>ₑ runStep problem w
+      case r of λ where
+        Done     → ok w′
+        Continue → runLimit n problem w′
+
+    run : Problem → Wave → RunResult
+    run = runLimit (suc (shapeSize Cell))
