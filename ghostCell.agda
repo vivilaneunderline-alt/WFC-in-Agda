@@ -333,7 +333,6 @@ module WFC where
       w (inj₂ ghost ⊗ ep)
     
 
-
     sameBool : Bool → Bool → Bool
     sameBool true true = true
     sameBool false false = true
