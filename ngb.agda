@@ -318,20 +318,30 @@ module WFC where
     supported? : Problem → Wave → Bool [[ Cell ⊗ Pattern ]]
     supported? prop w (i ⊗ p) = all (hasSupport? prop w i p)
 
-    pruneValue : Problem → Wave → CellIndex → PatternIndex → Bool
-    pruneValue prop old i p =
-      old (interiorCell i ⊗ p)
-      ∧ supported? prop old (i ⊗ p)
+    -- pruneValue : Problem → Wave → CellIndex → PatternIndex → Bool
+    -- pruneValue prop old i p =
+    --   old (interiorCell i ⊗ p)
+    --   ∧ supported? prop old (i ⊗ p)
 
-    pruneCell : Problem → Wave → CellIndex → Wave → Wave
-    pruneCell prop old i acc = foldShape {s = Pattern}
-      (λ p acc′ → updateAt
-      (interiorCell i ⊗ p) (pruneValue prop old i p) acc′)
-      acc
+    -- pruneCell : Problem → Wave → CellIndex → Wave → Wave
+    -- pruneCell prop old i acc = foldShape {Pattern}
+    --   (λ p acc′ → updateAt
+    --   (interiorCell i ⊗ p) (pruneValue prop old i p) acc′)
+    --   acc
+
+    -- pruneWave : Problem → Wave → Wave
+    -- pruneWave prop old = foldShape {Cell}
+    --   (λ i acc → pruneCell prop old i acc) old
 
     pruneWave : Problem → Wave → Wave
-    pruneWave prop old = foldShape {s = Cell}
-      (λ i acc → pruneCell prop old i acc) old
+    pruneWave prop old =
+      foldShape {Cell ⊗ Pattern}
+        (λ { (i ⊗ p) acc →
+          acc
+            ⟨ interiorCell i ⊗ p ⟩:=
+            (old (interiorCell i ⊗ p)
+              ∧ supported? prop old (i ⊗ p))
+        }) old
 
     -- propagateWithLimit : ℕ → Problem → Wave → Wave
     -- propagateWithLimit 0 p s = s
