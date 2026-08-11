@@ -337,10 +337,8 @@ module WFC where
     pruneWave prop old =
       foldShape {Cell ⊗ Pattern}
         (λ { (i ⊗ p) acc →
-          acc
-            ⟨ interiorCell i ⊗ p ⟩:=
-            (old (interiorCell i ⊗ p)
-              ∧ supported? prop old (i ⊗ p))
+          acc ⟨ interiorCell i ⊗ p ⟩:=
+          (old (interiorCell i ⊗ p) ∧ supported? prop old (i ⊗ p))
         }) old
 
     -- propagateWithLimit : ℕ → Problem → Wave → Wave
@@ -403,4 +401,132 @@ module WFC where
 
 
 
+    open import Relation.Binary.PropositionalEquality using (_≡_; refl)
+    
+    _⊆w_ : Wave → Wave → Set
+    Φ ⊆w Ψ = ∀ i p →
+      Φ (interiorCell i ⊗ p) ≡ true →
+      Ψ (interiorCell i ⊗ p) ≡ true
+    
+    ⊆w-refl : ∀ {Φ : Wave} → Φ ⊆w Φ
+    ⊆w-refl i p h = h
 
+    ⊆w-trans : ∀ {Φ Ψ Ω : Wave} → Φ ⊆w Ψ → Ψ ⊆w Ω → Φ ⊆w Ω
+    ⊆w-trans Φ⊆Ψ Ψ⊆Ω i p h = Ψ⊆Ω i p (Φ⊆Ψ i p h)
+
+    _⊆full_ : Wave → Wave → Set
+    Φ ⊆full Ψ = ∀ k → 
+      Φ k ≡ true → Ψ k ≡ true
+
+    ⊆full-refl : ∀ {Φ : Wave} → Φ ⊆full Φ
+    ⊆full-refl k h = h
+
+    ⊆full-trans : ∀ {Φ Ψ Ω : Wave} → Φ ⊆full Ψ → Ψ ⊆full Ω → Φ ⊆full Ω
+    ⊆full-trans Φ⊆Ψ Ψ⊆Ω k h = Ψ⊆Ω k (Φ⊆Ψ k h)
+
+    full⊆⇒real⊆ : ∀ {Φ Ψ : Wave} → Φ ⊆full Ψ → Φ ⊆w Ψ
+    full⊆⇒real⊆ Φ⊆Ψ i p h = Φ⊆Ψ (interiorCell i ⊗ p) h
+
+    foldFin-preserves : ∀ {A : Set} {n : ℕ}
+      (Inv : A → Set) (f : Fin n → A → A) →
+      (∀ i acc → Inv acc → Inv (f i acc)) →
+      ∀ z → Inv z → Inv (foldFin n f z)
+    foldFin-preserves {n = zero} Inv f step z Inv-z = Inv-z
+    foldFin-preserves {n = suc n} Inv f step z Inv-z =
+      step Fin.zero (foldFin n (λ i acc → f (Fin.suc i) acc) z)
+      (foldFin-preserves
+        Inv
+        (λ i acc → f (Fin.suc i) acc)
+        (λ i acc h → step (Fin.suc i) acc h)
+        z Inv-z)
+
+    foldShape-preserves : ∀ {A : Set} {s : S}
+      (Inv : A → Set) (f : P s → A → A) →
+      (∀ i acc → Inv acc → Inv (f i acc)) →
+      ∀ z → Inv z → Inv (foldShape {s} f z)
+    foldShape-preserves {s = ι n} Inv f step z Inv-z =
+      foldFin-preserves
+        Inv
+        (λ i acc → f (ι i) acc)
+        (λ i acc h → step (ι i) acc h)
+        z Inv-z
+    foldShape-preserves {s = s ⊗ t} Inv f step z Inv-z =
+      foldShape-preserves {s = s}
+        Inv
+        (λ i acc₁ → foldShape {t} (λ j acc₂ → f (i ⊗ j) acc₂) acc₁)
+        (λ i acc₁ h₁ →
+          foldShape-preserves {s = t}
+            Inv
+            (λ j acc₂ → f (i ⊗ j) acc₂)
+            (λ j acc₂ h₂ → step (i ⊗ j) acc₂ h₂)
+            acc₁ h₁)
+        z Inv-z
+    
+    -- propagation only removes patterns
+    updateAt-only-removes : ∀ {old acc : Wave}
+      (k : P (FullCell ⊗ Pattern)) (x : Bool) →
+      acc ⊆full old → (x ≡ true → old k ≡ true) →
+      (acc ⟨ k ⟩:= x) ⊆full old
+    updateAt-only-removes {old} {acc} k x acc⊆old x-ok j h
+      with sameP? j k
+    ... | yes refl = x-ok h
+    ... | no _ = acc⊆old j h
+
+    pruneValue-only-removes : ∀ (prop : Problem)
+      (old : Wave) (i : CellIndex) (p : PatternIndex) →
+      (old (interiorCell i ⊗ p) ∧ supported? prop old (i ⊗ p)) ≡ true →
+      old (interiorCell i ⊗ p) ≡ true
+    pruneValue-only-removes prop old i p h
+      with old (interiorCell i ⊗ p)
+    ... | true  = refl
+    ... | false with h
+    ...   | ()
+
+    pruneWave-only-removes-full : ∀ (prop : Problem)
+      (old : Wave) → pruneWave prop old ⊆full old
+    pruneWave-only-removes-full prop old =
+      foldShape-preserves {s = Cell ⊗ Pattern}
+        (λ acc → acc ⊆full old)
+        (λ { (i ⊗ p) acc →
+          acc ⟨ interiorCell i ⊗ p ⟩:=
+          (old (interiorCell i ⊗ p) ∧ supported? prop old (i ⊗ p))
+        })
+        (λ { (i ⊗ p) acc acc⊆old →
+          updateAt-only-removes
+            (interiorCell i ⊗ p)
+            (old (interiorCell i ⊗ p) ∧ supported? prop old (i ⊗ p))
+            acc⊆old
+            (pruneValue-only-removes prop old i p)
+        })
+        old
+        ⊆full-refl
+
+    pruneWave-only-removes : ∀ (prop : Problem)
+      (old : Wave) → pruneWave prop old ⊆w old
+    pruneWave-only-removes prop old =
+      full⊆⇒real⊆ (pruneWave-only-removes-full prop old)
+
+
+    FullAssignment : Set
+    FullAssignment = FullCellIndex → PatternIndex
+
+    CompatibleWithWave : Wave → FullAssignment → Set
+    CompatibleWithWave w A = ∀ fc → w (fc ⊗ A fc) ≡ true
+
+    Satisfies : Problem → FullAssignment → Set
+    Satisfies prop A = ∀ {w : Wave} →
+      CompatibleWithWave w A →
+      ∀ i → supported? prop w (i ⊗ A (interiorCell i)) ≡ true
+
+    record LegalSolution (prop : Problem) : Set where
+      field
+        assignment : FullAssignment
+        satisfies  : Satisfies prop assignment
+    open LegalSolution public
+
+    PreservesSolutions : Problem → Wave → Wave → Set
+    PreservesSolutions prop before after =
+      ∀ A →
+      Satisfies prop A →
+      CompatibleWithWave before A →
+      CompatibleWithWave after A
