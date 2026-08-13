@@ -279,7 +279,7 @@ module WFC where
     initialHaloWave = K true
 
     haloLookup : HaloState → CellIndex → PatternIndex → Bool
-    haloLookup w i p = w (embed-s i ⊗ p)
+    haloLookup w i p = nest w (embed-s i) p
 
     haloNeighbourPatterns :
       HaloState → CellIndex → DirectionIndex → Bool [[ Pattern ]]
@@ -288,10 +288,10 @@ module WFC where
 
     haloUpdate :
       (CellIndex → PatternIndex → Bool) → HaloState → HaloState
-    haloUpdate next old = foldShape {s = Cell ⊗ Pattern}
+    haloUpdate next before = foldShape {s = Cell ⊗ Pattern}
       (λ { (i ⊗ p) acc →
         (acc ⟨ embed-s i ⊗ p ⟩:= (next i p))
-      }) old
+      }) before
 
     postulate
       haloLookup-update :
@@ -377,8 +377,8 @@ module WFC where
     supported? prop w (i ⊗ p) = all (hasSupport? prop w i p)
 
     pruneWave : Problem → State → State
-    pruneWave prop old =
-      update (λ i p → lookup old i p ∧ supported? prop old (i ⊗ p)) old
+    pruneWave prop before =
+      update (λ i p → lookup before i p ∧ supported? prop before (i ⊗ p)) before
 
     
     sameBool : Bool → Bool → Bool
@@ -387,11 +387,11 @@ module WFC where
     sameBool _ _ = false
 
     sameWave? : State → State → Bool
-    sameWave? before after = all {s = Cell ⊗ Pattern}
+    sameWave? Φ Ψ = all {s = Cell ⊗ Pattern}
       (λ { (i ⊗ p) →
         sameBool
-          (lookup before i p)
-          (lookup after  i p)})
+          (lookup Φ i p)
+          (lookup Ψ i p)})
 
     propagateStep : Problem → State → Success × State
     propagateStep prop w =
@@ -444,7 +444,7 @@ module WFC where
     Satisfies : Problem → Assignment → Set
     Satisfies prop A = ∀ {w : State} →
       CompatibleWithWave w A →
-      ∀ i → supported? prop w (i ⊗ A  i) ≡ true
+      ∀ i → supported? prop w (i ⊗ A i) ≡ true
 
     record LegalSolution (prop : Problem) : Set where
       field
@@ -473,28 +473,28 @@ module WFC where
 
     -- propagation only removes patterns
     pruneValue-only-removes : ∀ (prop : Problem)
-      (old : State) (i : CellIndex) (p : PatternIndex) →
-      (lookup old i p ∧ supported? prop old (i ⊗ p)) ≡ true →
-      lookup old i p ≡ true
-    pruneValue-only-removes prop old i p h
-      with lookup old i p
+      (before : State) (i : CellIndex) (p : PatternIndex) →
+      (lookup before i p ∧ supported? prop before (i ⊗ p)) ≡ true →
+      lookup before i p ≡ true
+    pruneValue-only-removes prop before i p h
+      with lookup before i p
     ... | true  = refl
     ... | false with h
     ...   | ()
 
     pruneWave-lookup : ∀ (prop : Problem)
-      (old : State) (i : CellIndex) (p : PatternIndex) →
-      lookup (pruneWave prop old) i p ≡
-      (lookup old i p ∧ supported? prop old (i ⊗ p))
-    pruneWave-lookup prop old i p = lookup-update
-      (λ i p → lookup old i p ∧ supported? prop old (i ⊗ p)) old i p
+      (before : State) (i : CellIndex) (p : PatternIndex) →
+      lookup (pruneWave prop before) i p ≡
+      (lookup before i p ∧ supported? prop before (i ⊗ p))
+    pruneWave-lookup prop before i p = lookup-update
+      (λ i p → lookup before i p ∧ supported? prop before (i ⊗ p)) before i p
 
     pruneWave-only-removes : ∀ (prop : Problem)
-      (old : State) → pruneWave prop old ⊆w old
-    pruneWave-only-removes prop old i p h =
-      pruneValue-only-removes prop old i p
+      (before : State) → pruneWave prop before ⊆w before
+    pruneWave-only-removes prop before i p h =
+      pruneValue-only-removes prop before i p
         (trans
-          (sym (pruneWave-lookup prop old i p))
+          (sym (pruneWave-lookup prop before i p))
           h)
 
     propagateStep-only-removes :
