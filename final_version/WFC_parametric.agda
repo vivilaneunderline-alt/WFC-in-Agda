@@ -485,17 +485,21 @@ module WFC where
     pruneWave-lookup : ∀ (prop : Problem)
       (before : State) (i : CellIndex) (p : PatternIndex) →
       lookup (pruneWave prop before) i p ≡
+      -- lookup (update next before) i p ≡ next i p
       (lookup before i p ∧ supported? prop before (i ⊗ p))
     pruneWave-lookup prop before i p = lookup-update
       (λ i p → lookup before i p ∧ supported? prop before (i ⊗ p)) before i p
 
     pruneWave-only-removes : ∀ (prop : Problem)
       (before : State) → pruneWave prop before ⊆w before
+      -- ∀ i p → lookup (pruneWave prop before) i p ≡ true →
+      -- lookup before i p ≡ true
     pruneWave-only-removes prop before i p h =
       pruneValue-only-removes prop before i p
         (trans
           (sym (pruneWave-lookup prop before i p))
           h)
+        -- (lookup before i p ∧ supported? prop before (i ⊗ p)) ≡ true
 
     propagateStep-only-removes :
       ∀ (prop : Problem) (w : State) →
@@ -510,6 +514,7 @@ module WFC where
       propagateWithLimit limit prop w ⊆w w
     propagateWithLimit-only-removes zero prop w = 
       ⊆w-refl
+      -- propagateWithLimit zero prop w = w
     propagateWithLimit-only-removes (suc limit) prop w
       with propagateStep prop w | propagateStep-only-removes prop w
     ... | Done , w′ | w′⊆w = w′⊆w
@@ -531,20 +536,23 @@ module WFC where
     pruneWave-preserves-solution :
       ∀ (prop : Problem) (before : State) →
       PreservesSolutions prop before (pruneWave prop before)
-
+    
     pruneWave-preserves-solution
-      prop before A sat before-compatible i
-      rewrite pruneWave-lookup
-            prop before i (A i)
+      prop before A
+      sat -- Satisfies prop A
+      before-compatible -- CompatibleWithWave before A
+      i
+      -- lookup (pruneWave prop before) i (A i) ≡ true
+      rewrite pruneWave-lookup prop before i (A i)
+      -- lookup before i (A i) ∧ supported? prop before (i ⊗ A i) ≡ true
         | before-compatible i
         | sat before-compatible i
       = refl
 
     propagateStep-preserves-solution :
       ∀ (prop : Problem) (before : State) →
-      PreservesSolutions
-        prop before
-        (proj₂ (propagateStep prop before))
+      PreservesSolutions prop before (proj₂ (propagateStep prop before))
+    
     propagateStep-preserves-solution prop before
       with sameWave? before (pruneWave prop before)
     ... | true  = pruneWave-preserves-solution prop before
@@ -552,28 +560,28 @@ module WFC where
 
     propagateWithLimit-preserves-solutions :
       ∀ (limit : ℕ) (prop : Problem) (before : State) →
-      PreservesSolutions
-        prop before
-        (propagateWithLimit limit prop before)
+      PreservesSolutions prop before (propagateWithLimit limit prop before)
+    
     propagateWithLimit-preserves-solutions zero prop before
-      A sat before-compatible =
-      before-compatible
+      A sat before-compatible = before-compatible
+      -- propagateWithLimit zero prop before = before
+    
     propagateWithLimit-preserves-solutions (suc limit) prop before
       with propagateStep prop before
-        | propagateStep-preserves-solution prop before
-    ... | Done , after | step-preserves =
-      step-preserves
+      | propagateStep-preserves-solution prop before
+    ... | Done , after | step-preserves = step-preserves
+    -- propagateWithLimit (suc limit) prop before = after
     ... | Continue , after | step-preserves =
-      λ A sat before-compatible →
-        propagateWithLimit-preserves-solutions
-          limit prop after
-          A sat
-          (step-preserves A sat before-compatible)
+      λ A
+      sat -- Satisfies prop A
+      before-compatible -- CompatibleWithWave before A
+      →
+      propagateWithLimit-preserves-solutions limit prop after
+        A sat (step-preserves A sat before-compatible)
 
     propagate-preserves-solutions :
       ∀ (prop : Problem) (before : State) →
       PreservesSolutions prop before (propagate prop before)
     propagate-preserves-solutions prop before =
       propagateWithLimit-preserves-solutions
-        (suc (shapeSize (Cell ⊗ Pattern)))
-        prop before
+        (suc (shapeSize (Cell ⊗ Pattern))) prop before
