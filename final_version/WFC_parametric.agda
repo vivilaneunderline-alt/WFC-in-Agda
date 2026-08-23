@@ -38,7 +38,8 @@ module ArOps where
   open import Data.Fin as Fin using (Fin) 
   open import Data.Sum using (inj₁; inj₂)
   open import Relation.Nullary using (Dec; yes; no) 
-  open import Relation.Binary.PropositionalEquality using (_≡_; refl) 
+  open import Data.Empty using (⊥; ⊥-elim)
+  open import Relation.Binary.PropositionalEquality using (_≡_; refl; sym; trans) 
   
 
   data S : Set where
@@ -130,10 +131,63 @@ module ArOps where
   ... | no p≢q  | _        = no λ { refl → p≢q refl }
   ... | yes refl | no p≢q  = no λ { refl → p≢q refl }
   
+  fin-suc-injective : ∀ {n} {i j : Fin n} →
+    Fin.suc i ≡ Fin.suc j → i ≡ j
+  fin-suc-injective refl = refl
+
+  lift-injective : ∀ {n} {i j : Fin n} →
+    lift i ≡ lift j → i ≡ j
+  lift-injective {i = Fin.zero} {j = Fin.zero} h = refl
+  lift-injective {i = Fin.zero} {j = Fin.suc j} ()
+  lift-injective {i = Fin.suc i} {j = Fin.zero} ()
+  lift-injective {i = Fin.suc i} {j = Fin.suc j} h
+    with lift-injective (fin-suc-injective h)
+  ... | refl = refl
+
+  embed-injective : ∀ {n} {i j : Fin n} →
+    embed i ≡ embed j → i ≡ j
+  embed-injective h =
+    lift-injective (fin-suc-injective h)
+
+  pι-injective : ∀ {n} {i j : Fin n} →
+    ι i ≡ ι j → i ≡ j
+  pι-injective refl = refl
+
+  p⊗-inj₁ : ∀ {s t : S} {i i′ : P s} {j j′ : P t} →
+    i ⊗ j ≡ i′ ⊗ j′ → i ≡ i′
+  p⊗-inj₁ refl = refl
+
+  p⊗-inj₂ : ∀ {s t : S} {i i′ : P s} {j j′ : P t} →
+    i ⊗ j ≡ i′ ⊗ j′ → j ≡ j′
+  p⊗-inj₂ refl = refl
+
+  embed-s-injective : ∀ {s : S} {i j : P s} →
+    embed-s i ≡ embed-s j → i ≡ j
+  embed-s-injective {s = ι n} {i = ι i} {j = ι j} h
+    with embed-injective (pι-injective h)
+  ... | refl = refl
+  embed-s-injective {s = s ⊗ t} {i = i₁ ⊗ i₂} {j = j₁ ⊗ j₂} h
+    with embed-s-injective (p⊗-inj₁ h) | embed-s-injective (p⊗-inj₂ h)
+  ... | refl | refl = refl
+
   updateAt : ∀ {s : S} {X : Set} → P s → X → X [[ s ]] → X [[ s ]]
   updateAt i x a j with sameP? j i
   ... | yes _ = x
   ... | no _  = a j
+
+  updateAt-hit : ∀ {s : S} {X : Set}
+    (a : X [[ s ]]) (k : P s) (x : X) →
+    updateAt k x a k ≡ x
+  updateAt-hit a k x with sameP? k k
+  ... | yes _ = refl
+  ... | no k≢k = ⊥-elim (k≢k refl)
+
+  updateAt-miss : ∀ {s : S} {X : Set}
+    (a : X [[ s ]]) {j k : P s} (x : X) → (j ≡ k → ⊥) →
+    updateAt k x a j ≡ a j
+  updateAt-miss a {j} {k} x j≠k with sameP? j k
+  ... | yes j≡k = ⊥-elim (j≠k j≡k)
+  ... | no _ = refl
   
   
   foldFin : ∀ {A : Set} → (n : ℕ) → (Fin n → A → A) → A → A
@@ -146,6 +200,101 @@ module ArOps where
       (λ i acc → f (ι i) acc) z
   foldShape {s ⊗ t} f z = foldShape {s} (λ i acc₁ → foldShape {t}
       (λ j acc₂ → f (i ⊗ j) acc₂) acc₁) z
+
+  foldFin-preserves : ∀ {A : Set} {n : ℕ}
+    (Inv : A → Set) (f : Fin n → A → A) →
+    (∀ i acc → Inv acc → Inv (f i acc)) →
+    ∀ z → Inv z → Inv (foldFin n f z)
+  foldFin-preserves {n = zero} Inv f step z Inv-z = Inv-z
+  foldFin-preserves {n = suc n} Inv f step z Inv-z =
+    step Fin.zero (foldFin n (λ i acc → f (Fin.suc i) acc) z)
+      (foldFin-preserves
+        Inv
+        (λ i acc → f (Fin.suc i) acc)
+        (λ i acc h → step (Fin.suc i) acc h)
+        z Inv-z)
+
+  foldShape-preserves : ∀ {A : Set} {s : S}
+    (Inv : A → Set) (f : P s → A → A) →
+    (∀ i acc → Inv acc → Inv (f i acc)) →
+    ∀ z → Inv z → Inv (foldShape {s} f z)
+  foldShape-preserves {s = ι n} Inv f step z Inv-z =
+    foldFin-preserves
+      Inv
+      (λ i acc → f (ι i) acc)
+      (λ i acc h → step (ι i) acc h)
+      z Inv-z
+  foldShape-preserves {s = s ⊗ t} Inv f step z Inv-z =
+    foldShape-preserves {s = s}
+      Inv
+      (λ i acc₁ → foldShape {t} (λ j acc₂ → f (i ⊗ j) acc₂) acc₁)
+      (λ i acc₁ h₁ →
+        foldShape-preserves {s = t}
+          Inv
+          (λ j acc₂ → f (i ⊗ j) acc₂)
+          (λ j acc₂ h₂ → step (i ⊗ j) acc₂ h₂)
+          acc₁ h₁)
+      z Inv-z
+
+
+  foldFin-target : ∀ {n : ℕ} {A X : Set}
+    (step : Fin n → A → A) (at : A → X) (k : Fin n) (x : X) (z : A) →
+    (∀ acc → at (step k acc) ≡ x) →
+    (∀ j acc → (j ≡ k → ⊥) → at (step j acc) ≡ at acc) →
+    at (foldFin n step z) ≡ x
+  foldFin-target {n = zero} step at () x z hit miss
+  foldFin-target {n = suc n} step at Fin.zero x z hit miss = hit _
+  foldFin-target {n = suc n} step at (Fin.suc k) x z hit miss =
+    trans
+      (miss Fin.zero
+        (foldFin n (λ i acc → step (Fin.suc i) acc) z)
+        (λ ()))
+      (foldFin-target
+        (λ i acc → step (Fin.suc i) acc) at k x z
+        (λ acc → hit acc)
+        (λ j acc j≠k →
+          miss (Fin.suc j) acc
+            (λ eq → j≠k (fin-suc-injective eq))))
+
+  foldShape-target : ∀ {s : S} {A X : Set}
+    (step : P s → A → A) (at : A → X) (k : P s) (x : X) (z : A) →
+    (∀ acc → at (step k acc) ≡ x) →
+    (∀ j acc → (j ≡ k → ⊥) → at (step j acc) ≡ at acc) →
+    at (foldShape {s} step z) ≡ x
+  foldShape-target {s = ι n} step at (ι k) x z hit miss =
+    foldFin-target
+      (λ i acc → step (ι i) acc) at k x z
+      hit
+      (λ j acc j≠k →
+        miss (ι j) acc
+          (λ eq → j≠k (pι-injective eq)))
+  foldShape-target {s = s ⊗ t} step at (i ⊗ j) x z hit miss =
+    foldShape-target {s = s}
+      (λ i′ acc₁ →
+        foldShape {t}
+          (λ j′ acc₂ → step (i′ ⊗ j′) acc₂)
+          acc₁) 
+          at i x z
+      (λ acc₁ →
+        foldShape-target {s = t}
+          (λ j′ acc₂ → step (i ⊗ j′) acc₂)
+          at j x
+          acc₁
+          hit
+          (λ j′ acc₂ j′≠j →
+            miss (i ⊗ j′) acc₂
+              (λ eq → j′≠j (p⊗-inj₂ eq))))
+      (λ i′ acc₁ i′≠i →
+        foldShape-preserves {s = t}
+          (λ acc₂ → at acc₂ ≡ at acc₁)
+          (λ j′ acc₂ → step (i′ ⊗ j′) acc₂)
+          (λ j′ acc₂ h →
+            trans
+              (miss (i′ ⊗ j′) acc₂
+                (λ eq → i′≠i (p⊗-inj₁ eq)))
+              h)
+          acc₁
+          refl)
   
   foldMap : ∀ {s : S} {X A : Set} → (X → A → A) → A → X [[ s ]] → A
   foldMap f z a = foldShape
@@ -278,8 +427,20 @@ module WFC where
     initialHaloWave : HaloState
     initialHaloWave = K true
 
+    haloKey : P (Cell ⊗ Pattern) → P (FullCell ⊗ Pattern)
+    haloKey (i ⊗ p) = embed-s i ⊗ p
+
+    haloKey-injective :
+      ∀ {q r : P (Cell ⊗ Pattern)} →
+      haloKey q ≡ haloKey r →
+      q ≡ r
+    haloKey-injective {q = i ⊗ p} {r = j ⊗ p′} h
+      with embed-s-injective (p⊗-inj₁ h)
+         | p⊗-inj₂ h
+    ... | refl | refl = refl
+
     haloLookup : HaloState → CellIndex → PatternIndex → Bool
-    haloLookup w i p = nest w (embed-s i) p
+    haloLookup w i p = w (haloKey (i ⊗ p))
 
     haloNeighbourPatterns :
       HaloState → CellIndex → DirectionIndex → Bool [[ Pattern ]]
@@ -290,14 +451,29 @@ module WFC where
       (CellIndex → PatternIndex → Bool) → HaloState → HaloState
     haloUpdate next before = foldShape {s = Cell ⊗ Pattern}
       (λ { (i ⊗ p) acc →
-        (acc ⟨ embed-s i ⊗ p ⟩:= (next i p))
+        (acc ⟨ haloKey (i ⊗ p) ⟩:= (next i p))
       }) before
 
-    postulate
-      haloLookup-update :
-        ∀ (next : CellIndex → PatternIndex → Bool)
-        (w : HaloState) (i : CellIndex) (p : PatternIndex) →
-        haloLookup (haloUpdate next w) i p ≡ next i p
+    haloLookup-update :
+      ∀ (next : CellIndex → PatternIndex → Bool)
+      (w : HaloState) (i : CellIndex) (p : PatternIndex) →
+      haloLookup (haloUpdate next w) i p ≡ next i p
+    haloLookup-update next w i p =
+      foldShape-target {s = Cell ⊗ Pattern}
+        (λ { (i′ ⊗ p′) acc →
+          updateAt (haloKey (i′ ⊗ p′)) (next i′ p′) acc
+        })
+        (λ acc → haloLookup acc i p)
+        (i ⊗ p)
+        (next i p)
+        w
+        (λ acc →
+          updateAt-hit acc (haloKey (i ⊗ p)) (next i p))
+        (λ { (i′ ⊗ p′) acc q≠target →
+          updateAt-miss acc (next i′ p′)
+            (λ keyEq →
+              q≠target (sym (haloKey-injective keyEq)))
+        })
 
     haloWaveRep : WaveRep d
     haloWaveRep =
@@ -349,10 +525,43 @@ module WFC where
 
 
     chooseFirstAllowed : State → CellIndex → Maybe PatternIndex
-    -- chooseFirstAllowed w i = foldShape
-    --   (λ p → maybe just (bool⇒maybe (lookup w i p) p)) nothing
-    chooseFirstAllowed w i = foldJ
-      (λ p → bool⇒maybe (lookup w i p) p)
+    chooseFirstAllowed w i = foldShape
+      (λ p → maybe just (bool⇒maybe (lookup w i p) p)) nothing
+    -- chooseFirstAllowed w i = foldJ
+    --   (λ p → bool⇒maybe (lookup w i p) p)
+
+--------------------------------------------------
+    -- seedRank : ℕ → ℕ → ℕ
+    -- seedRank seed zero    = zero
+    -- seedRank seed (suc n) = Div._%_ seed (suc n)
+
+    -- seedSkip : ℕ → ℕ → ℕ
+    -- seedSkip seed zero = zero
+    -- seedSkip seed (suc n) = n ∸ seedRank seed (suc n)
+
+    -- seededChoiceStep :
+    --   State → CellIndex → PatternIndex →
+    --   (ℕ × Maybe PatternIndex) → (ℕ × Maybe PatternIndex)
+    -- seededChoiceStep w i p (remaining , just selected) =
+    --   remaining , just selected
+    -- seededChoiceStep w i p (remaining , nothing) with lookup w i p
+    -- ... | false = remaining , nothing
+    -- ... | true with remaining
+    -- ...   | zero  = zero , just p
+    -- ...   | suc r = r , nothing
+
+    -- chooseFirstAllowed : ℕ → State → CellIndex → Maybe PatternIndex
+    -- chooseFirstAllowed seed w i =
+    --   proj₂
+    --     (foldShape
+    --       (seededChoiceStep w i)
+    --       (seedSkip seed (allowedCount w i) , nothing))
+
+    -- nextSeed : ℕ → ℕ
+    -- nextSeed seed =
+    --   Div._%_ (1664525 * seed + 1013904223) 4294967296
+--------------------------------------------------
+
 
     observe :
       CellIndex → PatternIndex → State → State
@@ -585,3 +794,75 @@ module WFC where
     propagate-preserves-solutions prop before =
       propagateWithLimit-preserves-solutions
         (suc (shapeSize (Cell ⊗ Pattern))) prop before
+
+
+    PropagationFixedPoint : Problem → State → Set
+    PropagationFixedPoint prop w =
+      ∀ i p →
+        lookup (pruneWave prop w) i p ≡ lookup w i p
+
+    record UniquePatternAt (w : State) (i : CellIndex) : Set where
+      field
+        chosenPattern : PatternIndex
+        chosenPattern-allowed :
+          lookup w i chosenPattern ≡ true
+        chosenPattern-unique :
+          ∀ p → lookup w i p ≡ true → p ≡ chosenPattern
+
+    ExactlyOnePattern : State → Set
+    ExactlyOnePattern w = ∀ i → UniquePatternAt w i
+
+    singletonAssignment :
+      ∀ {w : State} → ExactlyOnePattern w → Assignment
+    singletonAssignment one i =
+      UniquePatternAt.chosenPattern (one i)
+
+    record WaveLegalSolution (prop : Problem) (w : State) : Set where
+      field
+        finalAssignment : Assignment
+        final-compatible : CompatibleWithWave w finalAssignment
+        final-unique :
+          ∀ i p →
+          lookup w i p ≡ true →
+          p ≡ finalAssignment i
+        final-supported :
+          ∀ i →
+          supported? prop w (i ⊗ finalAssignment i) ≡ true
+
+    and-fixed-true-right : ∀ (a b : Bool) →
+      a ≡ true → (a ∧ b) ≡ a → b ≡ true
+    and-fixed-true-right true  true  refl eq = refl
+    and-fixed-true-right true  false refl ()
+    and-fixed-true-right false b     ()   eq
+
+    fixedPoint-allowed-supported : ∀ (prop : Problem) (w : State) →
+      PropagationFixedPoint prop w →
+      ∀ i p →
+      lookup w i p ≡ true →
+      supported? prop w (i ⊗ p) ≡ true
+    fixedPoint-allowed-supported prop w fixed i p allowed =
+      and-fixed-true-right
+        (lookup w i p)
+        (supported? prop w (i ⊗ p))
+        allowed
+        (trans
+          (sym (pruneWave-lookup prop w i p))
+          (fixed i p))
+
+    fixedPoint-singleton-is-legal : ∀ (prop : Problem) (w : State) →
+      PropagationFixedPoint prop w →
+      (one : ExactlyOnePattern w) →
+      WaveLegalSolution prop w
+    fixedPoint-singleton-is-legal prop w fixed one =
+      record
+      { 
+        finalAssignment = singletonAssignment one; 
+        final-compatible = λ i →
+          UniquePatternAt.chosenPattern-allowed (one i); 
+        final-unique = λ i p allowed →
+          UniquePatternAt.chosenPattern-unique (one i) p allowed; 
+        final-supported = λ i →
+            fixedPoint-allowed-supported
+              prop w fixed i (singletonAssignment one i)
+              (UniquePatternAt.chosenPattern-allowed (one i))
+        }
