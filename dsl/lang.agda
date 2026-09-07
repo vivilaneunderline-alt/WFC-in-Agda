@@ -25,11 +25,15 @@ module Syntax where
     `sel : E P (ar s τ) → E P (ix s) → E P τ
     `bool⇒nat : E P bool → E P nat
     _`+_ : (a b : E P nat) → E P nat 
+    _`∧_       : (a b : E P bool) → E P bool
+    _`∨_       : (a b : E P bool) → E P bool
     `numVal : ℕ → E P nat
     `boolVal : Bool → E P bool
     _`!=ₙ_ : (a b : E P nat) → E P bool 
     `nest : E P (ar (s ⊗ p) τ) → E P (ar s (ar p τ))
+
     `foldShape : (P (ix s) → P τ → E P τ) → E P τ → E P τ
+    `reduce : (P τ → P τ → E P τ) → E P τ → E P (ar s τ) → E P τ
 
 
   _`<$>_ : ∀ {P} → (E P τ → E P σ) → E P (ar s τ) → E P (ar s σ)
@@ -37,6 +41,12 @@ module Syntax where
 
   `sum : ∀ {P} → E P (ar s nat) → E P nat
   `sum a = `foldShape (λ i x → `sel a (` i) `+ ` x) (`numVal 0)
+  `any : ∀ {P} → E P (ar s bool) → E P bool
+  `any a =
+    `reduce (λ x acc → (` x) `∨ (` acc)) (`boolVal false) a
+  `all : ∀ {P} → E P (ar s bool) → E P bool
+  `all a =
+    `reduce (λ x acc → (` x) `∧ (` acc)) (`boolVal true) a
 
   -- Assumes that the input array is the real wave
   `allowedCount : ∀ {P} → E P (ar (s ⊗ p) bool) → E P (ar s nat) 
