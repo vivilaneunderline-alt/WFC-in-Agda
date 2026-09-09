@@ -4,119 +4,102 @@ open import Data.Bool
 open import WFC_parametric
 
 module Lang where
+
 module Syntax where
 
   open ArOps
-  
+
+  infixr 7 _×ₛ_
+  infixr 8 _×τ_
+
+  data Sh : Set where
+    dim  : ℕ → Sh
+    _×ₛ_ : Sh → Sh → Sh
+  ⟦_⟧ₛ : Sh → S
+  ⟦ dim n ⟧ₛ   = ι n
+  ⟦ s ×ₛ p ⟧ₛ = ⟦ s ⟧ₛ ⊗ ⟦ p ⟧ₛ
+
   data Ty : Set where
-    ix : S → Ty
-    ar : S → Ty → Ty
+    ix   : Sh → Ty
+    ar   : Sh → Ty → Ty
     bool : Ty
-    nat : Ty
-    --maybe : Ty → Ty
+    nat  : Ty
+    _×τ_ : Ty → Ty → Ty
 
   variable
-    s p q r : S
+    s p q r : Sh
     τ σ δ : Ty
+
+  infixr 6 _`∧_
+  infixr 5 _`∨_
+  infixl 6 _`+_
+
+  data RedOp : Ty → Set where
+    `natAdd  : RedOp nat
+    `boolAnd : RedOp bool
+    `boolOr  : RedOp bool
 
   data E (P : Ty → Set) : Ty → Set where
     ` : P τ → E P τ
+
     `imap : (P (ix s) → E P τ) → E P (ar s τ)
     `sel : E P (ar s τ) → E P (ix s) → E P τ
-    `bool⇒nat : E P bool → E P nat
-    _`+_ : (a b : E P nat) → E P nat 
+
+    `numVal    : ℕ → E P nat
+    `boolVal   : Bool → E P bool
+    `bool⇒nat  : E P bool → E P nat
+    _`+_       : (a b : E P nat) → E P nat
+    
+    _`!=ₙ_     : (a b : E P nat) → E P bool
     _`∧_       : (a b : E P bool) → E P bool
     _`∨_       : (a b : E P bool) → E P bool
-    `numVal : ℕ → E P nat
-    `boolVal : Bool → E P bool
-    _`!=ₙ_ : (a b : E P nat) → E P bool 
-    `nest : E P (ar (s ⊗ p) τ) → E P (ar s (ar p τ))
+    `not       : E P bool → E P bool
+    `if        : E P bool → E P τ → E P τ → E P τ
 
+    `pair : E P τ → E P σ → E P (τ ×τ σ)
+    `fst : E P (τ ×τ σ) → E P τ
+    `snd : E P (τ ×τ σ) → E P σ
+    `ixPair : E P (ix s) → E P (ix p) → E P (ix (s ×ₛ p))
+    `ixFst : E P (ix (s ×ₛ p)) → E P (ix s)
+    `ixSnd : E P (ix (s ×ₛ p)) → E P (ix p)
+
+    `nest      : E P (ar (s ×ₛ p) τ) → E P (ar s (ar p τ))
     `foldShape : (P (ix s) → P τ → E P τ) → E P τ → E P τ
     `reduce : (P τ → P τ → E P τ) → E P τ → E P (ar s τ) → E P τ
+    `parFoldShape : RedOp τ → (P (ix s) → E P τ) → E P τ
+    `parReduce : RedOp τ → E P (ar s τ) → E P τ
 
 
   _`<$>_ : ∀ {P} → (E P τ → E P σ) → E P (ar s τ) → E P (ar s σ)
   f `<$> a = `imap λ i → f (`sel a (` i))
 
   `sum : ∀ {P} → E P (ar s nat) → E P nat
-  `sum a = `foldShape (λ i x → `sel a (` i) `+ ` x) (`numVal 0)
+  `sum a = `parReduce `natAdd a
   `any : ∀ {P} → E P (ar s bool) → E P bool
-  `any a =
-    `reduce (λ x acc → (` x) `∨ (` acc)) (`boolVal false) a
+  `any a = `parReduce `boolOr a
   `all : ∀ {P} → E P (ar s bool) → E P bool
-  `all a =
-    `reduce (λ x acc → (` x) `∧ (` acc)) (`boolVal true) a
+  `all a = `parReduce `boolAnd a
 
-  -- Assumes that the input array is the real wave
-  `allowedCount : ∀ {P} → E P (ar (s ⊗ p) bool) → E P (ar s nat) 
-  `allowedCount a = `sum `<$> (`nest (`bool⇒nat `<$> a)) 
+  `sumShape : ∀ {P} → (P (ix s) → E P nat) → E P nat
+  `sumShape f = `parFoldShape `natAdd f
+  `anyShape : ∀ {P} → (P (ix s) → E P bool) → E P bool
+  `anyShape f = `parFoldShape `boolOr f
+  `allShape : ∀ {P} → (P (ix s) → E P bool) → E P bool
+  `allShape f = `parFoldShape `boolAnd f
 
-  `noContradiction : ∀ {P} → E P (ar (s ⊗ p) bool) → E P (ar s bool)
-  `noContradiction a
-    = `imap λ i → `sel (`allowedCount a) (` i) `!=ₙ `numVal 0
+  `booleanDot : ∀ {P} → E P (ar s bool) → E P (ar s bool) → E P bool
+  `booleanDot a b = `anyShape λ i → (`sel a (` i)) `∧ (`sel b (` i))
 
-  -- and so on
+  `allowedCount : ∀ {P} → E P (ar (s ×ₛ p) bool) → E P (ar s nat)
+  `allowedCount a = `sum `<$> (`nest (`bool⇒nat `<$> a))
 
-module Pretty where
+  `noContradiction : ∀ {P} → E P (ar (s ×ₛ p) bool) → E P (ar s bool)
+  `noContradiction a =
+    `imap λ i →
+      `sel (`allowedCount a) (` i)
+        `!=ₙ
+      `numVal 0
 
-  open import Data.String
-  open import Text.Printf
-  open Syntax
-  open ArOps
-  
-  var : ℕ → String
-  var n = printf "x%u" n
-
-  pretty : E (λ _ → ℕ) τ → ℕ → String 
-  pretty (` x) n = var x
-  pretty (`imap f) n = let b = pretty (f (suc n)) n 
-                       in printf "(imap λ %s → %s)" (var n) b  
-  pretty (`sel e e₁) n = printf "(%s)[%s]" (pretty e n) (pretty e₁ n)
-  pretty (`bool⇒nat e) n = printf "natFromBool(%s)" (pretty e n)
-  pretty (e `+ e₁) n = printf "(%s + %s)" (pretty e n) (pretty e₁ n)
-  pretty (`numVal x) n = printf "%u" x
-  pretty (`boolVal false) n = printf "false"
-  pretty (`boolVal true) n = printf "true"
-  pretty (e `!=ₙ e₁) n = printf "(%s != %s)" (pretty e n) (pretty e₁ n)
-  pretty (`nest e) n = printf "nest(%s)" (pretty e n)
-  pretty (`foldShape f e) n 
-    = let ix = var n
-          a = var (suc n)
-          e = pretty e n
-          b = pretty (f (n) ((1 + n))) (2 + n)
-      in printf "foldShape (λ %s %s → %s) (%s)" ix a b e 
-
-  test = pretty (`noContradiction {ι 10}{ι 10} (` 0)) 1
-
-module Semantics where
-
-  open import Data.Maybe
-  open import Relation.Nullary
-  open Syntax
-  open Helper
-  open ArOps
-  -- Semantics
-  ⟦_⟧ₜ : Ty → Set
-  ⟦ ix x ⟧ₜ = P x
-  ⟦ ar x τ ⟧ₜ = ⟦ τ ⟧ₜ [[ x ]]
-  ⟦ bool ⟧ₜ = Bool
-  ⟦ nat ⟧ₜ = ℕ
-  --⟦ maybe τ ⟧ₜ = Maybe ⟦ τ ⟧ₜ
-
-  ⟦_⟧ : E ⟦_⟧ₜ τ → ⟦ τ ⟧ₜ
-  ⟦ ` x ⟧ = x
-  ⟦ `imap f ⟧ = λ i → ⟦ f i ⟧ 
-  ⟦ `sel e e₁ ⟧ = ⟦ e ⟧ ⟦ e₁ ⟧
-  ⟦ `bool⇒nat e ⟧ = bool⇒nat ⟦ e ⟧
-  ⟦ e `+ e₁ ⟧ = ⟦ e ⟧ + ⟦ e₁ ⟧
-  ⟦ `numVal x ⟧ = x
-  ⟦ `boolVal x ⟧ = x
-  ⟦ e `!=ₙ e₁ ⟧ = not (does (⟦ e ⟧ ℕ.≟ ⟦ e₁ ⟧))
-  ⟦ `nest e ⟧ = nest ⟦ e ⟧
-  ⟦ `foldShape f e ⟧ = foldShape (λ i x → ⟦ f i x ⟧) ⟦ e ⟧
-
-  test-sem : Bool [[ s ⊗ p ]] → _
-  test-sem {s} {p} a = ⟦ `noContradiction {s}{p} (` a) ⟧
-
-
+  `globallyNoContradiction : ∀ {P} → E P (ar (s ×ₛ p) bool) → E P bool
+  `globallyNoContradiction a =
+    `all (`noContradiction a)
