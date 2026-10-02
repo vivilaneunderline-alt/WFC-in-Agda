@@ -233,3 +233,15 @@ module Interp where
       (λ i acc → applyRedOp op (interp a i) acc)
       (redIdentity op)
 
+module Show where
+
+  open import Data.Nat
+  open import Data.Bool
+  open import Data.String hiding (show)
+  open import Data.Product
+
+  open import Data.List using (List; []; _∷_)
+    renaming
+      (_++_    to _++L_;
+       map      to mapL;
+       concatMap to concatMapL)
