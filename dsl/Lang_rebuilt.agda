@@ -245,3 +245,84 @@ module Show where
       (_++_    to _++L_;
        map      to mapL;
        concatMap to concatMapL)
+
+  open import Text.Printf
+
+  open import Effect.Monad
+  open import Effect.Monad.State
+
+  open RawMonadState {{...}}
+  open RawMonad {{...}} hiding (_⊗_)
+
+  instance
+    _ = monad
+    _ = monadState
+
+
+  data Ix : Sh → Set where
+    ι   : ∀ {n} → String → Ix (dim n)
+    _⊗_ : Ix s → Ix p → Ix (s ×ₛ p)
+
+  Val : Ty → Set
+  Val bool       = String
+  Val nat        = String
+  Val (ix s)     = Ix s
+  Val (τ ⇒ σ)    = Val τ → State ℕ (Val σ)
+  Val (τ ×τ σ)   = Val τ × Val σ
+
+
+  fresh : ℕ → String
+  fresh = printf "x_%u"
+
+
+  ix-join : Ix s → String → String
+  ix-join (ι x)     d = x
+  ix-join (i ⊗ j)   d =
+    ix-join i d ++ d ++ ix-join j d
+
+
+  ix-map : (String → String) → Ix s → Ix s
+  ix-map f (ι x)   = ι (f x)
+  ix-map f (i ⊗ j) = ix-map f i ⊗ ix-map f j
+
+
+  ix-fst : Ix (s ×ₛ p) → Ix s
+  ix-fst (i ⊗ j) = i
+
+
+  ix-snd : Ix (s ×ₛ p) → Ix p
+  ix-snd (i ⊗ j) = j
+
+
+  to-sel : Ix s → String → String
+  to-sel i a =
+    a ++ ix-join (ix-map (printf "[%s]") i) ""
+
+
+  ix-if : String → Ix s → Ix s → Ix s
+  ix-if c (ι x) (ι y) =
+    ι (printf "(if %s then %s else %s)" c x y)
+
+  ix-if c (i₁ ⊗ j₁) (i₂ ⊗ j₂) =
+    ix-if c i₁ i₂ ⊗ ix-if c j₁ j₂
+
+
+  nat-strings : ℕ → List String
+  nat-strings zero = []
+  nat-strings (suc n) =
+    nat-strings n ++L
+      (printf "%u" n ∷ [])
+
+
+  indices : (s : Sh) → List (Ix s)
+
+  indices (dim n) =
+    mapL ι (nat-strings n)
+
+  indices (s ×ₛ p) =
+    concatMapL
+      (λ i →
+        mapL
+          (λ j → i ⊗ j)
+          (indices p))
+      (indices s)
