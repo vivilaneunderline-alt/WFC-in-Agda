@@ -326,3 +326,19 @@ module Show where
           (λ j → i ⊗ j)
           (indices p))
       (indices s)
+
+  foldIxM :
+    ∀ {s τ} →
+    List (Ix s) →
+    (Ix s → Val τ → State ℕ (Val τ)) →
+    Val τ →
+    State ℕ (Val τ)
+
+  foldIxM [] step z =
+    return z
+
+  foldIxM (i ∷ is) step z = do
+    z' ← step i z
+    foldIxM is step z'
+
+  
