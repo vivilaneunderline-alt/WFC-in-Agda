@@ -13,6 +13,19 @@ data Sh : Set where
   dim  : ℕ → Sh
   _×ₛ_ : Sh → Sh → Sh
 
+halo : Sh → Sh
+halo (dim n) = dim (ℕ.suc (ℕ.suc n))
+halo (s ×ₛ p) = halo s ×ₛ halo p
+rank : Sh → ℕ
+rank (dim n) = 1
+rank (s ×ₛ p) = rank s + rank p
+AxisOf : Sh → Sh
+AxisOf s = dim (rank s)
+Side : Sh
+Side = dim 2
+directionShape : Sh → Sh
+directionShape s = AxisOf s ×ₛ Side
+
 ⟦_⟧ₛ : Sh → S
 ⟦ dim n ⟧ₛ   = ι n
 ⟦ s ×ₛ p ⟧ₛ = ⟦ s ⟧ₛ ⊗ ⟦ p ⟧ₛ
@@ -74,6 +87,9 @@ data E (V : Ty → Set) : Ty → Set where
   `ixFst : E V (ix (s ×ₛ p)) → E V (ix s)
   `ixSnd : E V (ix (s ×ₛ p)) → E V (ix p)
 
+  `embedHalo : E V (ix s) → E V (ix (halo s))
+  `haloNeighbour : E V (ix s) → E V (ix (directionShape s)) → E V (ix (halo s))
+
   `foldShape : E V (ix s ⇒ τ ⇒ τ) → E V τ → E V τ
   `reduce    : E V (τ ⇒ τ ⇒ τ) → E V τ → E V (ar s τ) → E V τ
 
@@ -87,23 +103,17 @@ syntax `lam (λ x → e) = `λ x ⇒ e
 
 `zipWith : E V ((τ ⇒ σ ⇒ δ) ⇒ ar s τ ⇒ ar s σ ⇒ ar s δ)
 `zipWith =
-  `λ f ⇒
-  `λ a ⇒
-  `λ b ⇒
-  `λ i ⇒ (` f `$ (` a `$ ` i)) `$ (` b `$ ` i)
+  `λ f ⇒ `λ a ⇒ `λ b ⇒ `λ i ⇒ 
+  (` f `$ (` a `$ ` i)) `$ (` b `$ ` i)
 
 `nest : E V (ar (s ×ₛ p) τ ⇒ ar s (ar p τ))
 `nest =
-  `λ a ⇒
-  `λ i ⇒
-  `λ j ⇒
-    ` a `$ (` i `⊗ ` j)
+  `λ a ⇒ `λ i ⇒ `λ j ⇒
+  ` a `$ (` i `⊗ ` j)
 
 `unnest : E V (ar s (ar p τ) ⇒ ar (s ×ₛ p) τ)
-`unnest =
-  `λ a ⇒
-  `λ ij ⇒
-    (` a `$ `ixFst (` ij)) `$ `ixSnd (` ij)
+`unnest = `λ a ⇒ `λ ij ⇒
+  (` a `$ `ixFst (` ij)) `$ `ixSnd (` ij)
 
 `bool⇒natF : E V (bool ⇒ nat)
 `bool⇒natF = `λ b ⇒ `bool⇒nat (` b)
@@ -133,9 +143,8 @@ syntax `lam (λ x → e) = `λ x ⇒ e
 
 `booleanDot : E V (ar s bool ⇒ ar s bool ⇒ bool)
 `booleanDot =
-  `λ a ⇒
-  `λ b ⇒
-    `any `$ (((`zipWith `$ `andF) `$ (` a)) `$ (` b))
+  `λ a ⇒ `λ b ⇒
+  `any `$ (((`zipWith `$ `andF) `$ (` a)) `$ (` b))
 
 `allowedCount : E V (ar (s ×ₛ p) bool ⇒ ar s nat)
 `allowedCount =
@@ -145,9 +154,8 @@ syntax `lam (λ x → e) = `λ x ⇒ e
 
 `noContradiction : E V (ar (s ×ₛ p) bool ⇒ ar s bool)
 `noContradiction =
-  `λ a ⇒
-  `λ i ⇒
-    ((`allowedCount `$ (` a)) `$ (` i)) `!=ₙ (`numVal 0)
+  `λ a ⇒ `λ i ⇒
+  ((`allowedCount `$ (` a)) `$ (` i)) `!=ₙ (`numVal 0)
 
 `globallyNoContradiction : E V (ar (s ×ₛ p) bool ⇒ bool)
 `globallyNoContradiction =
@@ -298,47 +306,3 @@ module Show where
   to-sel i a =
     a ++ ix-join (ix-map (printf "[%s]") i) ""
 
-
-  ix-if : String → Ix s → Ix s → Ix s
-  ix-if c (ι x) (ι y) =
-    ι (printf "(if %s then %s else %s)" c x y)
-
-  ix-if c (i₁ ⊗ j₁) (i₂ ⊗ j₂) =
-    ix-if c i₁ i₂ ⊗ ix-if c j₁ j₂
-
-
-  nat-strings : ℕ → List String
-  nat-strings zero = []
-  nat-strings (suc n) =
-    nat-strings n ++L
-      (printf "%u" n ∷ [])
-
-
-  indices : (s : Sh) → List (Ix s)
-
-  indices (dim n) =
-    mapL ι (nat-strings n)
-
-  indices (s ×ₛ p) =
-    concatMapL
-      (λ i →
-        mapL
-          (λ j → i ⊗ j)
-          (indices p))
-      (indices s)
-
-  foldIxM :
-    ∀ {s τ} →
-    List (Ix s) →
-    (Ix s → Val τ → State ℕ (Val τ)) →
-    Val τ →
-    State ℕ (Val τ)
-
-  foldIxM [] step z =
-    return z
-
-  foldIxM (i ∷ is) step z = do
-    z' ← step i z
-    foldIxM is step z'
-
-  
