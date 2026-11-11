@@ -306,3 +306,36 @@ module Show where
   to-sel i a =
     a ++ ix-join (ix-map (printf "[%s]") i) ""
 
+  ix-if : String → Ix s → Ix s → Ix s
+  ix-if c (ι x) (ι y) =
+    ι (printf "(if %s then %s else %s)" c x y)
+
+  ix-if c (i₁ ⊗ j₁) (i₂ ⊗ j₂) =
+    ix-if c i₁ i₂ ⊗ ix-if c j₁ j₂
+
+
+  nat-strings : ℕ → List String
+  nat-strings zero = []
+  nat-strings (suc n) =
+    nat-strings n ++L
+      (printf "%u" n ∷ [])
+
+
+  indices : (s : Sh) → List (Ix s)
+
+  indices (dim n) =
+    mapL ι (nat-strings n)
+
+  indices (s ×ₛ p) =
+    concatMapL
+      (λ i →
+        mapL
+          (λ j → i ⊗ j)
+          (indices p))
+      (indices s)
+
+  foldIx : ∀ {A : Set} → List (Ix s) → (Ix s → A → State ℕ A) → A → State ℕ A
+  foldIx [] f z = return z
+  foldIx (i ∷ is) f z = do
+    acc ← foldIx is f z
+    f i acc
