@@ -339,3 +339,23 @@ module Show where
   foldIx (i ∷ is) f z = do
     acc ← foldIx is f z
     f i acc
+
+  branch : (t : Ty) → String → Val t → Val t → Val t
+  branch bool c x y = printf "(if %s then %s else %s)" c x y
+  branch nat c x y = printf "(if %s then %s else %s)" c x y
+  branch (ix s) c x y = ix-if c x y
+  branch (a ⇒ b) c f g = λ x → do
+    l ← f x
+    r ← g x
+    return (branch b c l r)
+  branch (a ×τ b) c (x , y) (z , w) = branch a c x z , branch b c y w
+
+  redZero : RedOp τ → Val τ
+  redZero `natAdd = "0i64"
+  redZero `boolAnd = "true"
+  redZero `boolOr = "false"
+
+  redApply : RedOp τ → Val τ → Val τ → Val τ
+  redApply `natAdd x y = printf "(%s + %s)" x y
+  redApply `boolAnd x y = printf "(%s && %s)" x y
+  redApply `boolOr x y = printf "(%s || %s)" x y
