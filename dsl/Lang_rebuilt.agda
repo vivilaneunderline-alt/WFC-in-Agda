@@ -7,6 +7,26 @@ module Lang_rebuilt where
 
 open ArOps
 
+-- data Ty : Set where
+--   bool nat : Ty
+--   ix : ℕ → Ty
+--   arr : ℕ → Ty → Ty
+--   pair : Ty → Ty → Ty
+
+-- Ctx = List Ty
+-- variable
+--   Γ : Ctx
+--   a b : Ty
+--   n : ℕ
+
+-- data Var : Ctx → Ty → Set where
+--   vz : Var (a ∷ Γ) a
+--   vs : Var Γ a → Var (b ∷ Γ) a
+
+-- data Red : Ty → Set where
+--   add : Red nat
+--   and or : Red bool
+
 infixr 7 _×ₛ_
 
 data Sh : Set where
