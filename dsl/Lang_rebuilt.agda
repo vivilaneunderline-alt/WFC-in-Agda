@@ -27,6 +27,26 @@ open ArOps
 --   add : Red nat
 --   and or : Red bool
 
+data E (Γ : Ctx) : Ty → Set where
+--   var : Var Γ a → E Γ a
+--   number : ℕ → E Γ nat
+--   boolean : Bool → E Γ bool
+--   index : Fin n → E Γ (ix n)
+--   ordinal : E Γ (ix n) → E Γ nat
+--   plus : E Γ nat → E Γ nat → E Γ nat
+--   less : E Γ nat → E Γ nat → E Γ bool
+--   both : E Γ bool → E Γ bool → E Γ bool
+--   same : E Γ bool → E Γ bool → E Γ bool
+--   tuple : E Γ a → E Γ b → E Γ (pair a b)
+--   fst : E Γ (pair a b) → E Γ a
+--   snd : E Γ (pair a b) → E Γ b
+--   letE : E Γ a → E (a ∷ Γ) b → E Γ b
+--   ifE : E Γ bool → E Γ a → E Γ a → E Γ a
+--   imap : E (ix n ∷ Γ) a → E Γ (arr n a)
+--   select : E Γ (arr n a) → E Γ (ix n) → E Γ a
+--   foldShape : Red a → E (ix n ∷ Γ) a → E Γ a
+--   while : E Γ nat → E Γ a → E (a ∷ Γ) bool → E (a ∷ Γ) a → E Γ a
+
 infixr 7 _×ₛ_
 
 data Sh : Set where
