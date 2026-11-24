@@ -27,7 +27,7 @@ open ArOps
 --   add : Red nat
 --   and or : Red bool
 
-data E (Γ : Ctx) : Ty → Set where
+-- data E (Γ : Ctx) : Ty → Set where
 --   var : Var Γ a → E Γ a
 --   number : ℕ → E Γ nat
 --   boolean : Bool → E Γ bool
