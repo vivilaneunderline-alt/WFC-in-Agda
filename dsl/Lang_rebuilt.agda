@@ -47,6 +47,63 @@ open ArOps
 --   foldShape : Red a → E (ix n ∷ Γ) a → E Γ a
 --   while : E Γ nat → E Γ a → E (a ∷ Γ) bool → E (a ∷ Γ) a → E Γ a
 
+Sem : Ty → Set
+-- Sem bool = Bool
+-- Sem nat = ℕ
+-- Sem (ix n) = Fin n
+-- Sem (arr n a) = Fin n → Sem a
+-- Sem (pair a b) = Sem a × Sem b
+
+-- Env : Ctx → Set
+-- Env [] = Data.Unit.⊤ where import Data.Unit
+-- Env (a ∷ Γ) = Sem a × Env Γ
+
+-- lookup : Var Γ a → Env Γ → Sem a
+-- lookup vz ρ = proj₁ ρ
+-- lookup (vs v) ρ = lookup v (proj₂ ρ)
+
+-- identity : Red a → Sem a
+-- identity add = 0
+-- identity and = true
+-- identity or = false
+-- combine : Red a → Sem a → Sem a → Sem a
+-- combine add = _+_
+-- combine and = _∧_
+-- combine or = _∨_
+
+-- iterate : ℕ → (Sem a → Bool) → (Sem a → Sem a) → Sem a → Sem a
+-- iterate zero test step x = x
+-- iterate (suc fuel) test step x with test x
+-- ... | false = x
+-- ... | true = iterate fuel test step (step x)
+
+-- eval : E Γ a → Env Γ → Sem a
+-- eval (var v) ρ = lookup v ρ
+-- eval (number n) ρ = n
+-- eval (boolean b) ρ = b
+-- eval (index i) ρ = i
+-- eval (ordinal e) ρ = toℕ (eval e ρ)
+-- eval (plus x y) ρ = eval x ρ + eval y ρ
+-- eval (less x y) ρ = does (eval x ρ Nat.<? eval y ρ)
+-- eval (both x y) ρ = eval x ρ ∧ eval y ρ
+-- eval (same x y) ρ with eval x ρ | eval y ρ
+-- ... | true | true = true
+-- ... | false | false = true
+-- ... | _ | _ = false
+-- eval (tuple x y) ρ = eval x ρ , eval y ρ
+-- eval (fst x) ρ = proj₁ (eval x ρ)
+-- eval (snd x) ρ = proj₂ (eval x ρ)
+-- eval (letE x body) ρ = eval body (eval x ρ , ρ)
+-- eval (ifE c x y) ρ with eval c ρ
+-- ... | true = eval x ρ
+-- ... | false = eval y ρ
+-- eval (imap body) ρ i = eval body (i , ρ)
+-- eval (select x i) ρ = eval x ρ (eval i ρ)
+-- eval (foldShape {n = n} op body) ρ =
+--   ArOps.foldFin n (λ i acc → combine op (eval body (i , ρ)) acc) (identity op)
+-- eval (while fuel initial test step) ρ =
+--   iterate (eval fuel ρ) (λ x → eval test (x , ρ)) (λ x → eval step (x , ρ)) (eval initial ρ)
+
 infixr 7 _×ₛ_
 
 data Sh : Set where
